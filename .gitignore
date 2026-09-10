@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+
+# IDE / editor
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# Art assets are not distributed with this project - "Apple Music" and its logo
+# are trademarks of Apple Inc. Provide your own AppIcon.ico (the .csproj picks it
+# up automatically) and your own Discord Rich Presence art assets.
+AppleMusic.png
+AppIcon.ico
