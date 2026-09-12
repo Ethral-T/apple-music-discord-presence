@@ -97,6 +97,15 @@ namespace AppleMusicDiscordPresence
             manager.SessionsChanged += (_, _) => AttachToAppleMusicSession(manager);
             AttachToAppleMusicSession(manager);
 
+            // SessionsChanged is the "should" way to hear about Apple Music opening,
+            // closing, or restarting - but it's a known-flaky WinRT event (it can simply
+            // stop firing after a while, especially across sleep/wake or when the app
+            // restarts) and when it does, _session is left pointing at a session that no
+            // longer reflects reality, so everything downstream quietly reports "nothing
+            // playing" forever. This just re-checks GetSessions() on a timer regardless -
+            // a no-op if nothing's actually changed, a self-heal if the event went missing.
+            _ = Task.Run(SessionWatchdogAsync);
+
             if (!DiscordConfigured)
             {
                 AppLog.Write("No Discord Client ID set - Rich Presence is disabled, but the OBS overlay still works. See README.md to enable Discord.");
@@ -443,6 +452,33 @@ namespace AppleMusicDiscordPresence
             if (realArtist.Length == 0 || realAlbum.Length == 0) return (artist, album);
 
             return (realArtist, realAlbum);
+        }
+
+        /// <summary>
+        /// Safety net for AttachToAppleMusicSession: periodically re-checks for the
+        /// current Apple Music session even without a SessionsChanged event, using a
+        /// freshly-requested manager each time rather than trusting the one obtained at
+        /// startup indefinitely. SessionsChanged is a known-flaky WinRT event - it can
+        /// simply stop firing after a while (app restarts, sleep/wake), and a long-held
+        /// manager or session reference can go stale the same way - either of which
+        /// leaves the app stuck reporting "nothing playing" forever with no way to
+        /// notice on its own. This makes that self-heal within one interval instead.
+        /// </summary>
+        private static async Task SessionWatchdogAsync()
+        {
+            while (Volatile.Read(ref _shuttingDown) == 0)
+            {
+                await Task.Delay(10_000).ConfigureAwait(false);
+                try
+                {
+                    var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                    AttachToAppleMusicSession(manager);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"Session watchdog check failed: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
