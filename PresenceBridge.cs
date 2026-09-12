@@ -46,13 +46,21 @@ namespace AppleMusicDiscordPresence
         // of Discord's rate limit.
         private static readonly TimeSpan MinSendGap = TimeSpan.FromSeconds(10);
 
+        // Cheap same-manager re-check. SessionsChanged is flaky; this is the safety net.
+        private static readonly TimeSpan SessionCheckInterval = TimeSpan.FromSeconds(15);
+
+        // How often we may RequestAsync a fresh manager if the held one looks sick / stale.
+        private static readonly TimeSpan ManagerRefreshMinGap = TimeSpan.FromMinutes(5);
+
         private static readonly DiscordIpcClient Discord = new(DiscordClientId);
 
         // Sentinel key for "nothing is playing".
         private const string IdleKey = "\0idle";
 
         private static readonly object _sessionLock = new();
+        private static GlobalSystemMediaTransportControlsSessionManager? _manager;
         private static GlobalSystemMediaTransportControlsSession? _session;
+        private static DateTimeOffset _lastManagerRefreshUtc = DateTimeOffset.MinValue;
 
         // Debounce / publish state. Guarded by _debounceLock.
         private static readonly object _debounceLock = new();
@@ -94,7 +102,13 @@ namespace AppleMusicDiscordPresence
                 return;
             }
 
-            manager.SessionsChanged += (_, _) => AttachToAppleMusicSession(manager);
+            lock (_sessionLock)
+            {
+                _manager = manager;
+                _lastManagerRefreshUtc = DateTimeOffset.UtcNow;
+            }
+
+            manager.SessionsChanged += OnSessionsChanged;
             AttachToAppleMusicSession(manager);
 
             // SessionsChanged is the "should" way to hear about Apple Music opening,
@@ -102,8 +116,9 @@ namespace AppleMusicDiscordPresence
             // stop firing after a while, especially across sleep/wake or when the app
             // restarts) and when it does, _session is left pointing at a session that no
             // longer reflects reality, so everything downstream quietly reports "nothing
-            // playing" forever. This just re-checks GetSessions() on a timer regardless -
-            // a no-op if nothing's actually changed, a self-heal if the event went missing.
+            // playing" forever. Re-check GetSessions() on a timer against the SAME manager
+            // - a no-op if nothing's actually changed. Only RequestAsync a fresh manager
+            // when enumeration fails or after ManagerRefreshMinGap.
             _ = Task.Run(SessionWatchdogAsync);
 
             if (!DiscordConfigured)
@@ -135,7 +150,39 @@ namespace AppleMusicDiscordPresence
             StatusUpdated?.Invoke();
         }
 
-        private static void AttachToAppleMusicSession(GlobalSystemMediaTransportControlsSessionManager manager)
+        private static void OnSessionsChanged(
+            GlobalSystemMediaTransportControlsSessionManager sender,
+            SessionsChangedEventArgs args)
+            => AttachToAppleMusicSession(sender);
+
+        /// <summary>
+        /// Same logical Apple Music session? Prefer AUMID over ReferenceEquals: a fresh
+        /// manager from RequestAsync yields new session wrappers for the same app, which
+        /// would otherwise look like a reseat every watchdog tick.
+        /// </summary>
+        private static bool IsSameAppleMusicSession(
+            GlobalSystemMediaTransportControlsSession? current,
+            GlobalSystemMediaTransportControlsSession? next)
+        {
+            if (current == null && next == null) return true;
+            if (current == null || next == null) return false;
+            if (ReferenceEquals(current, next)) return true;
+            try
+            {
+                return string.Equals(
+                    current.SourceAppUserModelId,
+                    next.SourceAppUserModelId,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // Dead/stale session object - force a reseat.
+                return false;
+            }
+        }
+
+        /// <returns>false if GetSessions threw (manager may be stale); true otherwise.</returns>
+        private static bool AttachToAppleMusicSession(GlobalSystemMediaTransportControlsSessionManager manager)
         {
             lock (_sessionLock)
             {
@@ -154,11 +201,11 @@ namespace AppleMusicDiscordPresence
                 catch (Exception ex)
                 {
                     AppLog.Write($"Failed to enumerate media sessions: {ex.Message}");
-                    return;
+                    return false;
                 }
 
-                if (ReferenceEquals(target, _session))
-                    return;
+                if (IsSameAppleMusicSession(_session, target))
+                    return true;
 
                 if (_session != null)
                 {
@@ -172,13 +219,14 @@ namespace AppleMusicDiscordPresence
                 {
                     AppLog.Write("Apple Music session ended.");
                     QueueUpdate();
-                    return;
+                    return true;
                 }
 
                 _session.MediaPropertiesChanged += OnMediaChanged;
                 _session.PlaybackInfoChanged += OnPlaybackChanged;
                 AppLog.Write("Attached to Apple Music session.");
                 QueueUpdate();
+                return true;
             }
         }
 
@@ -456,23 +504,52 @@ namespace AppleMusicDiscordPresence
 
         /// <summary>
         /// Safety net for AttachToAppleMusicSession: periodically re-checks for the
-        /// current Apple Music session even without a SessionsChanged event, using a
-        /// freshly-requested manager each time rather than trusting the one obtained at
-        /// startup indefinitely. SessionsChanged is a known-flaky WinRT event - it can
-        /// simply stop firing after a while (app restarts, sleep/wake), and a long-held
-        /// manager or session reference can go stale the same way - either of which
-        /// leaves the app stuck reporting "nothing playing" forever with no way to
-        /// notice on its own. This makes that self-heal within one interval instead.
+        /// current Apple Music session even without a SessionsChanged event, using the
+        /// manager obtained at startup. A fresh RequestAsync every tick used to reseat
+        /// forever because new managers return new session wrappers and ReferenceEquals
+        /// always failed. We only refresh the manager on enumeration failure or after
+        /// ManagerRefreshMinGap.
         /// </summary>
         private static async Task SessionWatchdogAsync()
         {
             while (Volatile.Read(ref _shuttingDown) == 0)
             {
-                await Task.Delay(10_000).ConfigureAwait(false);
+                await Task.Delay(SessionCheckInterval).ConfigureAwait(false);
                 try
                 {
-                    var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-                    AttachToAppleMusicSession(manager);
+                    GlobalSystemMediaTransportControlsSessionManager? manager;
+                    DateTimeOffset lastRefresh;
+                    lock (_sessionLock)
+                    {
+                        manager = _manager;
+                        lastRefresh = _lastManagerRefreshUtc;
+                    }
+
+                    bool refreshDue = manager == null
+                        || DateTimeOffset.UtcNow - lastRefresh >= ManagerRefreshMinGap;
+
+                    if (manager != null && !refreshDue)
+                    {
+                        if (AttachToAppleMusicSession(manager))
+                            continue;
+                        // Enumeration failed - fall through and request a fresh manager.
+                    }
+
+                    var fresh = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                    lock (_sessionLock)
+                    {
+                        if (_manager != null && !ReferenceEquals(_manager, fresh))
+                        {
+                            try { _manager.SessionsChanged -= OnSessionsChanged; }
+                            catch { /* ignore */ }
+                        }
+                        fresh.SessionsChanged += OnSessionsChanged;
+                        _manager = fresh;
+                        _lastManagerRefreshUtc = DateTimeOffset.UtcNow;
+                        manager = fresh;
+                    }
+                    AppLog.Write("Refreshed media session manager.");
+                    AttachToAppleMusicSession(manager!);
                 }
                 catch (Exception ex)
                 {
