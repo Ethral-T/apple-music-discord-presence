@@ -24,55 +24,53 @@ namespace AppleMusicDiscordPresence
         public StatusForm()
         {
             Text = "Apple Music -> Discord Rich Presence";
-            Width = 620;
-            Height = 440;
+            Width = 640;
+            Height = 460;
+            MinimumSize = new Size(480, 320);
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = false;
             MinimizeBox = false;
             MaximizeBox = true;
 
-            // Row 0: Discord Client ID entry.
+            // Plain Dock stacking, deliberately not a TableLayoutPanel: nesting an
+            // AutoSize TableLayoutPanel inside another AutoSize row is a known way to get
+            // rows that collapse to near-zero height. Docked panels with fixed heights
+            // are boring but reliable. Controls of the same Dock side stack in the order
+            // they're added - the first Top-docked control claims the outer edge, so
+            // adding credentialPanel before _status puts it above it.
+
+            var credentialPanel = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(8, 6, 8, 6) };
             var credentialLabel = new Label
             {
                 Text = "Discord Client ID:",
                 AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Padding = new Padding(0, 8, 8, 0),
+                Dock = DockStyle.Left,
+                TextAlign = ContentAlignment.MiddleLeft,
             };
+            var saveButton = new Button { Text = "Save", Dock = DockStyle.Right, AutoSize = true };
+            saveButton.Click += OnSaveClientId;
             _clientIdBox = new TextBox
             {
                 Dock = DockStyle.Fill,
+                Margin = new Padding(6, 0, 6, 0),
                 Text = PresenceBridge.DiscordClientIdForDisplay,
                 PlaceholderText = "e.g. 1234567890123456789 - from discord.com/developers/applications",
             };
-            var saveButton = new Button { Text = "Save", AutoSize = true };
-            saveButton.Click += OnSaveClientId;
+            // Add order within this panel: Left and Right first, Fill last, so the
+            // text box's Fill correctly resolves to whatever space they didn't claim.
+            credentialPanel.Controls.Add(credentialLabel);
+            credentialPanel.Controls.Add(saveButton);
+            credentialPanel.Controls.Add(_clientIdBox);
 
-            var credentialRow = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                RowCount = 1,
-                AutoSize = true,
-                Padding = new Padding(8, 6, 8, 6),
-            };
-            credentialRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            credentialRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            credentialRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            credentialRow.Controls.Add(credentialLabel, 0, 0);
-            credentialRow.Controls.Add(_clientIdBox, 1, 0);
-            credentialRow.Controls.Add(saveButton, 2, 0);
-
-            // Row 1: current status.
             _status = new Label
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                Height = 32,
                 Padding = new Padding(10, 8, 10, 8),
                 Text = PresenceBridge.CurrentStatus,
                 Font = new Font(Font, FontStyle.Bold),
             };
 
-            // Row 2: scrolling log, fills the rest.
             _log = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -84,16 +82,9 @@ namespace AppleMusicDiscordPresence
                 BackColor = SystemColors.Window,
             };
 
-            // A TableLayoutPanel (rather than stacking multiple Dock.Top controls) so the
-            // row order is explicit instead of depending on Controls-collection z-order.
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.Controls.Add(credentialRow, 0, 0);
-            root.Controls.Add(_status, 0, 1);
-            root.Controls.Add(_log, 0, 2);
-            Controls.Add(root);
+            Controls.Add(_log);
+            Controls.Add(_status);
+            Controls.Add(credentialPanel);
 
             AcceptButton = saveButton;
             FormClosing += OnFormClosing;
