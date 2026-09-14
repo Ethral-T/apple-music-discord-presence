@@ -15,15 +15,54 @@ namespace AppleMusicDiscordPresence
     internal static class PresenceBridge
     {
         // Your Discord application's Client ID - create one at
-        // https://discord.com/developers/applications (see README.md). Either set the
-        // DISCORD_CLIENT_ID environment variable, or replace the placeholder below and
-        // rebuild. Without it, Rich Presence is disabled but the OBS overlay still works.
+        // https://discord.com/developers/applications (see README.md), then set it from
+        // the tray's "Show status" window (saved to AppSettings, never committed to
+        // source or set as a machine/user environment variable). Without it, Rich
+        // Presence is disabled but the OBS overlay still works.
         private const string PlaceholderClientId = "YOUR_DISCORD_CLIENT_ID_HERE";
-        private static readonly string DiscordClientId =
-            Environment.GetEnvironmentVariable("DISCORD_CLIENT_ID") is { Length: > 0 } fromEnv
-                ? fromEnv.Trim()
-                : PlaceholderClientId;
-        private static bool DiscordConfigured => DiscordClientId != PlaceholderClientId;
+        private static string _discordClientId = AppSettings.GetDiscordClientId() ?? PlaceholderClientId;
+        private static bool DiscordConfigured => _discordClientId != PlaceholderClientId;
+
+        /// <summary>The configured Client ID, or "" if none is set (for the settings UI).</summary>
+        public static string DiscordClientIdForDisplay => DiscordConfigured ? _discordClientId : "";
+
+        // Cancels whatever connect-retry loop is currently in flight when the Client ID
+        // changes, so an old loop retrying a since-replaced ID doesn't linger.
+        private static CancellationTokenSource? _discordConnectCts;
+        private static int _discordWatchdogStarted;
+
+        /// <summary>
+        /// Called from the settings UI. Pass null/empty to clear it (falls back to
+        /// overlay-only). Saves it, swaps in a fresh IPC client, and (re)connects -
+        /// no restart needed.
+        /// </summary>
+        public static void SetDiscordClientId(string? id)
+        {
+            id = (id ?? string.Empty).Trim();
+
+            _discordConnectCts?.Cancel();
+            var old = Discord;
+
+            if (id.Length == 0)
+            {
+                _discordClientId = PlaceholderClientId;
+                AppSettings.SetDiscordClientId(null);
+                Discord = new DiscordIpcClient(PlaceholderClientId);
+                try { old.ClearActivity(); } catch { /* best effort */ }
+                try { old.Dispose(); } catch { /* ignore */ }
+                AppLog.Write("Discord Client ID cleared - Rich Presence disabled.");
+                SetStatus("Overlay only - no Discord Client ID set");
+                return;
+            }
+
+            _discordClientId = id;
+            AppSettings.SetDiscordClientId(id);
+            Discord = new DiscordIpcClient(id);
+            try { old.Dispose(); } catch { /* ignore */ }
+
+            AppLog.Write("Discord Client ID saved - connecting...");
+            StartDiscordConnect();
+        }
 
         // Apple Music for Windows' AppUserModelId. This is what's checked to find the
         // right media session among Spotify/Edge/etc. Verify it on your machine (README
@@ -46,7 +85,7 @@ namespace AppleMusicDiscordPresence
         // of Discord's rate limit.
         private static readonly TimeSpan MinSendGap = TimeSpan.FromSeconds(10);
 
-        private static readonly DiscordIpcClient Discord = new(DiscordClientId);
+        private static DiscordIpcClient Discord = new(_discordClientId);
 
         // Sentinel key for "nothing is playing".
         private const string IdleKey = "\0idle";
@@ -108,24 +147,48 @@ namespace AppleMusicDiscordPresence
 
             if (!DiscordConfigured)
             {
-                AppLog.Write("No Discord Client ID set - Rich Presence is disabled, but the OBS overlay still works. See README.md to enable Discord.");
-                SetStatus("Overlay only - no Discord Client ID");
+                AppLog.Write("No Discord Client ID set yet - Rich Presence is disabled, but the OBS overlay still works. Set one from the tray's \"Show status\" window.");
+                SetStatus("Overlay only - no Discord Client ID set");
                 return;
             }
 
+            StartDiscordConnect();
+        }
+
+        /// <summary>
+        /// (Re)starts the connect-and-watch flow against whatever `Discord` currently
+        /// is. Cancels any connect loop already in flight first, so calling this again
+        /// after SetDiscordClientId changes the client cleanly supersedes the old one.
+        /// </summary>
+        private static void StartDiscordConnect()
+        {
+            _discordConnectCts?.Cancel();
+            var cts = new CancellationTokenSource();
+            _discordConnectCts = cts;
+            _ = Task.Run(() => ConnectAndWatchDiscordAsync(cts.Token));
+        }
+
+        private static async Task ConnectAndWatchDiscordAsync(CancellationToken token)
+        {
+            var discord = Discord; // snapshot: keep talking to the client this loop was started for
+
             SetStatus("Connecting to Discord...");
-            while (!Discord.Connect())
+            while (!discord.Connect())
             {
-                AppLog.Write($"Discord connect failed: {Discord.LastConnectError}");
-                if (Volatile.Read(ref _shuttingDown) != 0) return;
-                await Task.Delay(5000).ConfigureAwait(false);
+                AppLog.Write($"Discord connect failed: {discord.LastConnectError}");
+                if (Volatile.Read(ref _shuttingDown) != 0 || token.IsCancellationRequested) return;
+                try { await Task.Delay(5000, token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
             }
+            if (token.IsCancellationRequested) return;
+
             AppLog.Write("Connected to Discord.");
             SetStatus("Connected - watching for Apple Music");
 
-            _ = Task.Run(ConnectionWatchdogAsync);
-            await ForceResyncAsync().ConfigureAwait(false); // push whatever's already playing
+            if (Interlocked.Exchange(ref _discordWatchdogStarted, 1) == 0)
+                _ = Task.Run(ConnectionWatchdogAsync);
 
+            await ForceResyncAsync().ConfigureAwait(false); // push whatever's already playing
             AppLog.Write("Watching for Apple Music playback.");
         }
 
@@ -490,7 +553,7 @@ namespace AppleMusicDiscordPresence
             while (Volatile.Read(ref _shuttingDown) == 0)
             {
                 await Task.Delay(5000).ConfigureAwait(false);
-                if (Discord.IsConnected) continue;
+                if (!DiscordConfigured || Discord.IsConnected) continue;
 
                 AppLog.Write("Discord connection lost; reconnecting...");
                 SetStatus("Reconnecting to Discord...");
@@ -526,24 +589,16 @@ namespace AppleMusicDiscordPresence
         }
 
         /// <summary>Manual "Reconnect now" action for the tray menu.</summary>
-        public static void ReconnectNow() => _ = Task.Run(async () =>
+        public static void ReconnectNow()
         {
             if (!DiscordConfigured)
             {
-                AppLog.Write("No Discord Client ID set - nothing to reconnect. See README.md.");
+                AppLog.Write("No Discord Client ID set - nothing to reconnect. Set one from \"Show status\".");
                 return;
             }
             AppLog.Write("Manual reconnect requested.");
-            SetStatus("Reconnecting to Discord...");
-            if (!Discord.Connect())
-            {
-                AppLog.Write($"Reconnect failed: {Discord.LastConnectError}");
-                SetStatus("Discord not connected");
-                return;
-            }
-            AppLog.Write("Reconnected to Discord.");
-            await ForceResyncAsync().ConfigureAwait(false);
-        });
+            StartDiscordConnect();
+        }
 
         public static void Shutdown()
         {

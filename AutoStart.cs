@@ -1,24 +1,19 @@
 using System;
 using System.IO;
-using System.Text.Json;
 using Microsoft.Win32;
 
 namespace AppleMusicDiscordPresence
 {
     /// <summary>
     /// Registers/unregisters launching this app at sign-in via the per-user Run key.
-    /// The on/off preference is remembered separately from the registry key's mere
-    /// presence (in a small settings file) so turning it off via the tray menu sticks -
-    /// otherwise a later run would just see the key missing and "helpfully" recreate it.
+    /// The on/off preference is remembered in AppSettings, separately from the registry
+    /// key's mere presence, so turning it off via the tray menu sticks - otherwise a
+    /// later run would just see the key missing and "helpfully" recreate it.
     /// </summary>
     internal static class AutoStart
     {
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string ValueName = "AppleMusicDiscordPresence";
-
-        private static readonly string SettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "AppleMusicDiscordPresence", "settings.json");
 
         // AppContext.BaseDirectory (not Environment.ProcessPath) so this is correct even
         // when the current process is `dotnet.exe` hosting us during development - the
@@ -27,10 +22,10 @@ namespace AppleMusicDiscordPresence
 
         public static bool IsEnabled
         {
-            get => LoadPreference() ?? true;
+            get => AppSettings.GetAutoStart() ?? true;
             set
             {
-                SavePreference(value);
+                AppSettings.SetAutoStart(value);
                 Apply(value);
             }
         }
@@ -43,10 +38,10 @@ namespace AppleMusicDiscordPresence
         /// </summary>
         public static void EnsureAppliedOnStartup()
         {
-            var pref = LoadPreference();
+            var pref = AppSettings.GetAutoStart();
             if (pref == null)
             {
-                SavePreference(true);
+                AppSettings.SetAutoStart(true);
                 Apply(true);
             }
             else
@@ -69,36 +64,6 @@ namespace AppleMusicDiscordPresence
             catch (Exception ex)
             {
                 AppLog.Write($"Could not update the Windows startup entry: {ex.Message}");
-            }
-        }
-
-        private static bool? LoadPreference()
-        {
-            try
-            {
-                if (!File.Exists(SettingsPath)) return null;
-                using var doc = JsonDocument.Parse(File.ReadAllText(SettingsPath));
-                return doc.RootElement.TryGetProperty("autoStart", out var v)
-                       && v.ValueKind is JsonValueKind.True or JsonValueKind.False
-                    ? v.GetBoolean()
-                    : null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static void SavePreference(bool enabled)
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-                File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new { autoStart = enabled }));
-            }
-            catch (Exception ex)
-            {
-                AppLog.Write($"Could not save settings: {ex.Message}");
             }
         }
     }

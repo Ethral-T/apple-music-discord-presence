@@ -42,17 +42,25 @@ dormant.
    `Apple Music`).
 2. Copy the **Application ID** (a.k.a. Client ID) from the General Information
    page.
-3. Give it to the app one of these ways:
-   - set an environment variable `DISCORD_CLIENT_ID` to that number, **or**
-   - open `PresenceBridge.cs`, replace `YOUR_DISCORD_CLIENT_ID_HERE` with it,
-     and rebuild.
+3. In the app, right-click the tray icon → **Show status**, paste it into the
+   **Discord Client ID** box at the top, and click **Save**. It connects
+   immediately — no restart needed.
 4. Optional but recommended — under **Rich Presence → Art Assets**, upload two
    images with these exact asset key names:
    - `apple_music_logo` — shown as the large image when cover-art lookup fails
    - `apple_music_logo_small` — the small badge in the corner of the art
-5. Restart the app. It connects to your running Discord client automatically
-   (no app verification or OAuth needed) and reconnects on its own if Discord
-   restarts.
+
+No app verification or OAuth is needed, and it reconnects on its own if
+Discord restarts. Your Client ID is saved to a local settings file
+(`%APPDATA%\AppleMusicDiscordPresence\settings.json`) — never as a
+machine/user environment variable, and never committed to source. It's not
+actually a secret (every Rich Presence embeds it, and Discord's docs treat
+Client IDs as public), but keeping it local and out of your environment
+variables means it can't leak into every other process's environment.
+
+If you'd rather not type it through the UI: stop the app, create/edit that
+settings file yourself with `{"discordClientId": "<your ID>"}` (merge it in if
+the file already has other keys, e.g. `"autoStart"`), then start the app.
 
 ### What it looks like in Discord
 
@@ -129,13 +137,14 @@ skip around, presence updates are debounced (constants in `PresenceBridge.cs`):
 |---|---|
 | `Program.cs` | WinForms entry point; hands off to the tray app. |
 | `TrayAppContext.cs` | The tray icon, its menu, and the status window; owns the app's lifetime. |
-| `StatusForm.cs` | The "Show status" window — a live log + current status. |
+| `StatusForm.cs` | The "Show status" window — Discord Client ID entry, current status, and a live log. |
 | `PresenceBridge.cs` | Reads the SMTC session, debounces, and drives the Discord presence. |
 | `DiscordIpcClient.cs` | Minimal `discord-ipc-N` named-pipe client: handshake + `SET_ACTIVITY`. |
 | `AlbumArtLookup.cs` | Resolves cover art to a public HTTPS URL via the iTunes Search API. |
 | `OverlayServer.cs` | The local HTTP server for the OBS overlay (`/` and `/state`). |
 | `OverlayPage.cs` | The overlay's single-file HTML/CSS/JS. |
-| `AutoStart.cs` | The "Start with Windows" registry entry + its saved preference. |
+| `AutoStart.cs` | The "Start with Windows" registry entry. |
+| `AppSettings.cs` | The shared `settings.json` store (autostart preference, Discord Client ID). |
 | `AppLog.cs` | Tiny log pub/sub the status window subscribes to. |
 
 Cover art is looked up separately because Discord fetches Rich Presence image
