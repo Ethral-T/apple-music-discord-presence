@@ -23,6 +23,15 @@ namespace AppleMusicDiscordPresence
 
         public StatusForm()
         {
+            // Pins the DPI baseline to 96 and tells the form to scale itself (once, at
+            // creation) rather than leaving AutoScaleMode at its ambient default - without
+            // this, every explicit pixel Location/Size below gets rescaled unpredictably
+            // on a scaled display, which is what pushed the Save button off the visible
+            // window entirely. This is the same pair the WinForms Designer emits for any
+            // DPI-aware form.
+            AutoScaleDimensions = new SizeF(96f, 96f);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             Text = "Apple Music -> Discord Rich Presence";
             Width = 640;
             Height = 460;
@@ -32,44 +41,67 @@ namespace AppleMusicDiscordPresence
             MinimizeBox = false;
             MaximizeBox = true;
 
-            // Plain Dock stacking, deliberately not a TableLayoutPanel: nesting an
-            // AutoSize TableLayoutPanel inside another AutoSize row is a known way to get
-            // rows that collapse to near-zero height. Docked panels with fixed heights
-            // are boring but reliable. Controls of the same Dock side stack in the order
-            // they're added - the first Top-docked control claims the outer edge, so
-            // adding credentialPanel before _status puts it above it.
-
-            var credentialPanel = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(8, 6, 8, 6) };
+            // Every control below has a fixed Location/Size, set once, with no Dock/Fill/
+            // Anchor math involved in placing it - each row's text box is locked to its
+            // own fixed boundary and the button for that row sits at a fixed spot right
+            // beside it. Nothing here is computed from the window's width, so nothing can
+            // land at the wrong x-coordinate depending on when that width happens to be
+            // read - which is what caused controls to render on top of each other.
+            var credentialPanel = new Panel { Dock = DockStyle.Top, Height = 40 };
             var credentialLabel = new Label
             {
                 Text = "Discord Client ID:",
-                AutoSize = true,
-                Dock = DockStyle.Left,
+                AutoSize = false,
+                Location = new Point(8, 10),
+                Size = new Size(130, 20),
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-            var saveButton = new Button { Text = "Save", Dock = DockStyle.Right, AutoSize = true };
-            saveButton.Click += OnSaveClientId;
             _clientIdBox = new TextBox
             {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(6, 0, 6, 0),
+                Location = new Point(146, 8),
+                Size = new Size(400, 23),
                 Text = PresenceBridge.DiscordClientIdForDisplay,
-                PlaceholderText = "e.g. 1234567890123456789 - from discord.com/developers/applications",
+                PlaceholderText = "e.g. 1234567890123456789",
             };
-            // Add order within this panel: Left and Right first, Fill last, so the
-            // text box's Fill correctly resolves to whatever space they didn't claim.
+            var saveButton = new Button
+            {
+                Text = "Save",
+                Location = new Point(554, 6),
+                Size = new Size(70, 26),
+            };
+            saveButton.Click += OnSaveClientId;
             credentialPanel.Controls.Add(credentialLabel);
-            credentialPanel.Controls.Add(saveButton);
             credentialPanel.Controls.Add(_clientIdBox);
+            credentialPanel.Controls.Add(saveButton);
 
+            // Status line on its own full-width row so the whole thing stays readable
+            // regardless of length.
+            var statusPanel = new Panel { Dock = DockStyle.Top, Height = 32 };
             _status = new Label
             {
-                Dock = DockStyle.Top,
-                Height = 32,
-                Padding = new Padding(10, 8, 10, 8),
+                Location = new Point(8, 0),
+                Size = new Size(600, 32),
+                TextAlign = ContentAlignment.MiddleLeft,
                 Text = PresenceBridge.CurrentStatus,
                 Font = new Font(Font, FontStyle.Bold),
             };
+            statusPanel.Controls.Add(_status);
+
+            // A manual "Reconnect to Apple Music" button, on its own row below the
+            // status line. There's no automatic background polling for this any more -
+            // re-requesting the OS media session on a timer isn't free, and doesn't help
+            // if the broker itself is stuck (only a Windows restart fixes that) - so this
+            // is the on-demand way to ask the app to re-check right now, e.g. after Apple
+            // Music restarts.
+            var reconnectPanel = new Panel { Dock = DockStyle.Top, Height = 34 };
+            var reconnectButton = new Button
+            {
+                Text = "Reconnect to Apple Music",
+                Location = new Point(8, 4),
+                Size = new Size(170, 24),
+            };
+            reconnectButton.Click += (_, _) => PresenceBridge.ReconnectAppleMusic();
+            reconnectPanel.Controls.Add(reconnectButton);
 
             _log = new TextBox
             {
@@ -83,7 +115,8 @@ namespace AppleMusicDiscordPresence
             };
 
             Controls.Add(_log);
-            Controls.Add(_status);
+            Controls.Add(reconnectPanel);
+            Controls.Add(statusPanel);
             Controls.Add(credentialPanel);
 
             AcceptButton = saveButton;

@@ -136,15 +136,6 @@ namespace AppleMusicDiscordPresence
             manager.SessionsChanged += (_, _) => AttachToAppleMusicSession(manager);
             AttachToAppleMusicSession(manager);
 
-            // SessionsChanged is the "should" way to hear about Apple Music opening,
-            // closing, or restarting - but it's a known-flaky WinRT event (it can simply
-            // stop firing after a while, especially across sleep/wake or when the app
-            // restarts) and when it does, _session is left pointing at a session that no
-            // longer reflects reality, so everything downstream quietly reports "nothing
-            // playing" forever. This just re-checks GetSessions() on a timer regardless -
-            // a no-op if nothing's actually changed, a self-heal if the event went missing.
-            _ = Task.Run(SessionWatchdogAsync);
-
             if (!DiscordConfigured)
             {
                 AppLog.Write("No Discord Client ID set yet - Rich Presence is disabled, but the OBS overlay still works. Set one from the tray's \"Show status\" window.");
@@ -518,31 +509,27 @@ namespace AppleMusicDiscordPresence
         }
 
         /// <summary>
-        /// Safety net for AttachToAppleMusicSession: periodically re-checks for the
-        /// current Apple Music session even without a SessionsChanged event, using a
-        /// freshly-requested manager each time rather than trusting the one obtained at
-        /// startup indefinitely. SessionsChanged is a known-flaky WinRT event - it can
-        /// simply stop firing after a while (app restarts, sleep/wake), and a long-held
-        /// manager or session reference can go stale the same way - either of which
-        /// leaves the app stuck reporting "nothing playing" forever with no way to
-        /// notice on its own. This makes that self-heal within one interval instead.
+        /// Manual "Reconnect to Apple Music" action for the status window - re-requests
+        /// the session manager fresh and re-attaches. SessionsChanged (subscribed once in
+        /// RunAsync) is the passive way this normally happens and costs nothing; this is
+        /// the on-demand fallback for the rare case it's missed a change, without polling
+        /// the OS's media-session broker on a timer (repeatedly hammering that API isn't
+        /// free, and doesn't help anyway if the broker itself is the thing that's stuck -
+        /// no amount of retrying fixes that from here; a Windows restart does).
         /// </summary>
-        private static async Task SessionWatchdogAsync()
+        public static void ReconnectAppleMusic() => _ = Task.Run(async () =>
         {
-            while (Volatile.Read(ref _shuttingDown) == 0)
+            try
             {
-                await Task.Delay(10_000).ConfigureAwait(false);
-                try
-                {
-                    var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-                    AttachToAppleMusicSession(manager);
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Write($"Session watchdog check failed: {ex.Message}");
-                }
+                AppLog.Write("Manual Apple Music session refresh requested.");
+                var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                AttachToAppleMusicSession(manager);
             }
-        }
+            catch (Exception ex)
+            {
+                AppLog.Write($"Could not refresh the Apple Music session: {ex.Message}");
+            }
+        });
 
         /// <summary>
         /// Watches the IPC connection and reconnects if Discord restarts, then re-pushes

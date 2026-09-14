@@ -169,6 +169,13 @@ art has to be a public URL (Apple's own CDN, via iTunes Search).
   Canary) it attaches to whichever owns the first pipe it can open.
 - **Overlay port `39285`** is fixed; if it's taken, the tray log says so and the
   Discord side keeps working. Change it in `TrayAppContext.cs` if needed.
+- **If nothing is ever detected as playing**, even with Apple Music open and
+  playing, Windows' own media-session broker (the same thing behind the Win+Z
+  media flyout) may itself be stuck - check whether that flyout shows your
+  current track either. If it doesn't, that's a Windows-level issue outside
+  anything this app touches; restarting Windows resets it. Otherwise, use the
+  **Reconnect to Apple Music** button in **Show status** to re-attach without
+  restarting the whole app.
 
 ## Trademarks & affiliation
 
