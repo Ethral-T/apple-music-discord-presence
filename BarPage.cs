@@ -4,7 +4,7 @@ namespace AppleMusicDiscordPresence
     /// The full-width "bar" variant served at "/" when the URL has ?style=bar: no artwork, a strip across the whole
     /// page with "Title - Artist" on it, where the strip itself fills left-to-right as
     /// the song progresses. Same /state feed, ?scale=, ?fade= and /show behaviour as the
-    /// card at "/"; add ?pos=top to pin it to the top edge instead of the bottom.
+    /// card at "/"; ?pos=top|center|bottom sets where it sits (default: bottom).
     /// </summary>
     internal static class BarPage
     {
@@ -32,6 +32,7 @@ namespace AppleMusicDiscordPresence
     align-items: flex-end;   /* bottom edge by default */
   }
   html[data-pos="top"] body { align-items: flex-start; }
+  html[data-pos="center"] body { align-items: center; }
 
   #bar {
     position: relative;
@@ -98,8 +99,9 @@ namespace AppleMusicDiscordPresence
     document.documentElement.style.setProperty('--scale', String(scale));
   })();
 
-  // ?pos=top pins the bar to the top edge (default: bottom).
-  if (params.get('pos') === 'top') document.documentElement.dataset.pos = 'top';
+  // ?pos=top | center | bottom places the bar vertically (default: bottom).
+  const pos = (params.get('pos') || '').toLowerCase();
+  if (['top', 'center', 'bottom'].includes(pos)) document.documentElement.dataset.pos = pos;
 
   // ?fade=20 hides the bar once the song has played that many seconds; it returns when
   // the next song starts, or when /show (or the tray item) recalls it. Keyed off real

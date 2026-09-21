@@ -100,10 +100,14 @@ Combine them: `http://127.0.0.1:39285/?scale=1.4&fade=25`
 
 **Bar variant.** Add `?style=bar` for a full-width strip instead of the card: no
 artwork, just "Title — Artist" across the page, with the bar itself filling
-left-to-right as the song plays. It sits on the bottom edge by default; add
-`?pos=top` to pin it to the top. `?scale=` and `?fade=` (and the recall below)
+left-to-right as the song plays. `?scale=` and `?fade=` (and the recall below)
 work the same, e.g. `http://127.0.0.1:39285/?style=bar&scale=1.2&fade=25`. The
 tray menu has **Copy OBS bar overlay URL** for it.
+
+**Position.** `?pos=top`, `?pos=center` or `?pos=bottom` sets where the widget
+sits vertically, on either layout (the card is always centered horizontally; the
+bar spans the full width). Defaults: the card is centered, the bar is at the
+bottom. Example: `http://127.0.0.1:39285/?style=bar&pos=top`.
 
 **Recalling the widget after it has faded** (e.g. someone asks what's playing):
 right-click the tray icon → **Show song on overlay now (10s)**, or hit
@@ -111,9 +115,6 @@ right-click the tray icon → **Show song on overlay now (10s)**, or hit
 a plain GET, so it can be wired to a Stream Deck button, a Streamer.bot `!song`
 command ("Fetch URL" action), or a browser bookmark. The widget slides back in
 within about a second and fades out again on its own once the time is up.
-
-The widget is centered in the page. To anchor it elsewhere, edit the
-`body { align-items / justify-content }` rule in `OverlayPage.cs`.
 
 ### Overlay JSON
 

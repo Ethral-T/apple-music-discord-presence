@@ -69,6 +69,10 @@ namespace AppleMusicDiscordPresence
     transition: opacity .4s ease, transform .4s ease;
   }
   #card.visible { opacity: 1; transform: translateY(0); }
+  /* ?pos=top|center|bottom - vertical placement (default: center). Always centered horizontally. */
+  html[data-pos="top"] body { align-items: flex-start; }
+  html[data-pos="center"] body { align-items: center; }
+  html[data-pos="bottom"] body { align-items: flex-end; }
   #art {
     width: var(--art);
     height: var(--art);
@@ -175,6 +179,9 @@ namespace AppleMusicDiscordPresence
     const raw = parseFloat(new URLSearchParams(location.search).get('fade'));
     return Number.isFinite(raw) && raw > 0 ? Math.min(86400, raw) * 1000 : null;
   })();
+
+  const pos = (new URLSearchParams(location.search).get('pos') || '').toLowerCase();
+  if (['top', 'center', 'bottom'].includes(pos)) document.documentElement.dataset.pos = pos;
 
   const card = document.getElementById('card');
   const art = document.getElementById('art');
