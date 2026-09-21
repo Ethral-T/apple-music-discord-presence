@@ -73,6 +73,8 @@ namespace AppleMusicDiscordPresence
   html[data-pos="top"] body { align-items: flex-start; }
   html[data-pos="center"] body { align-items: center; }
   html[data-pos="bottom"] body { align-items: flex-end; }
+  /* ?progress=off - no duration bar (the card just gets a little shorter). */
+  html[data-progress="off"] #progress { display: none; }
   #art {
     width: var(--art);
     height: var(--art);
@@ -182,6 +184,10 @@ namespace AppleMusicDiscordPresence
 
   const pos = (new URLSearchParams(location.search).get('pos') || '').toLowerCase();
   if (['top', 'center', 'bottom'].includes(pos)) document.documentElement.dataset.pos = pos;
+
+  // ?progress=off (also 0 / false / no / hide / none) removes the duration bar.
+  const progressParam = (new URLSearchParams(location.search).get('progress') || '').toLowerCase();
+  if (['off', '0', 'false', 'no', 'hide', 'none'].includes(progressParam)) document.documentElement.dataset.progress = 'off';
 
   const card = document.getElementById('card');
   const art = document.getElementById('art');

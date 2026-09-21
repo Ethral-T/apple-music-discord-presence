@@ -109,6 +109,11 @@ sits vertically, on either layout (the card is always centered horizontally; the
 bar spans the full width). Defaults: the card is centered, the bar is at the
 bottom. Example: `http://127.0.0.1:39285/?style=bar&pos=top`.
 
+**Duration bar.** `?progress=off` removes it: on the card the progress bar
+disappears (and the card gets a little shorter), on `?style=bar` the fill goes and
+you're left with a plain strip carrying the text. Example:
+`http://127.0.0.1:39285/?style=bar&progress=off`.
+
 **Recalling the widget after it has faded** (e.g. someone asks what's playing):
 right-click the tray icon → **Show song on overlay now (10s)**, or hit
 `http://127.0.0.1:39285/show` (optionally `?seconds=15`, 1–300). That endpoint is

@@ -33,6 +33,8 @@ namespace AppleMusicDiscordPresence
   }
   html[data-pos="top"] body { align-items: flex-start; }
   html[data-pos="center"] body { align-items: center; }
+  /* ?progress=off - a plain strip with just the text; no duration fill. */
+  html[data-progress="off"] #fill { display: none; }
 
   #bar {
     position: relative;
@@ -70,8 +72,11 @@ namespace AppleMusicDiscordPresence
     text-shadow: 0 1px 3px rgba(0,0,0,.55);
     animation: text-in .45s cubic-bezier(.22, 1, .36, 1) both;
   }
-  #title { font-weight: 700; }
-  #artist { opacity: .85; }
+  /* Auto margins on the first and last item centre the text horizontally. (Rather than
+     justify-content: center, which clips both ends when the text is wider than the
+     bar; auto margins collapse to zero in that case and it just starts at the left.) */
+  #title { font-weight: 700; margin-left: auto; }
+  #artist { opacity: .85; margin-right: auto; }
   #artist:not(:empty)::before { content: "\2014"; margin: 0 .6em; opacity: .7; }
 
   @keyframes text-in {
@@ -102,6 +107,10 @@ namespace AppleMusicDiscordPresence
   // ?pos=top | center | bottom places the bar vertically (default: bottom).
   const pos = (params.get('pos') || '').toLowerCase();
   if (['top', 'center', 'bottom'].includes(pos)) document.documentElement.dataset.pos = pos;
+
+  // ?progress=off (also 0 / false / no / hide / none) removes the duration fill.
+  const progressParam = (params.get('progress') || '').toLowerCase();
+  if (['off', '0', 'false', 'no', 'hide', 'none'].includes(progressParam)) document.documentElement.dataset.progress = 'off';
 
   // ?fade=20 hides the bar once the song has played that many seconds; it returns when
   // the next song starts, or when /show (or the tray item) recalls it. Keyed off real
