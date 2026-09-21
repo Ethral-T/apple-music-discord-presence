@@ -98,6 +98,13 @@ nothing the page does can prevent it. Instead:
 
 Combine them: `http://127.0.0.1:39285/?scale=1.4&fade=25`
 
+**Bar variant.** Add `?style=bar` for a full-width strip instead of the card: no
+artwork, just "Title — Artist" across the page, with the bar itself filling
+left-to-right as the song plays. It sits on the bottom edge by default; add
+`?pos=top` to pin it to the top. `?scale=` and `?fade=` (and the recall below)
+work the same, e.g. `http://127.0.0.1:39285/?style=bar&scale=1.2&fade=25`. The
+tray menu has **Copy OBS bar overlay URL** for it.
+
 **Recalling the widget after it has faded** (e.g. someone asks what's playing):
 right-click the tray icon → **Show song on overlay now (10s)**, or hit
 `http://127.0.0.1:39285/show` (optionally `?seconds=15`, 1–300). That endpoint is

@@ -88,7 +88,10 @@ namespace AppleMusicDiscordPresence
                 {
                     case "/":
                     case "/index.html":
-                        await WriteAsync(ctx, "text/html; charset=utf-8", OverlayPage.Html);
+                        // ?style=bar swaps the card for the full-width bar variant; every other
+                        // tag (?scale=, ?fade=, ?pos=) is read by whichever page is served.
+                        bool bar = string.Equals(ctx.Request.QueryString["style"], "bar", StringComparison.OrdinalIgnoreCase);
+                        await WriteAsync(ctx, "text/html; charset=utf-8", bar ? BarPage.Html : OverlayPage.Html);
                         break;
 
                     case "/state":

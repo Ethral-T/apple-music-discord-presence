@@ -46,6 +46,7 @@ namespace AppleMusicDiscordPresence
             menu.Items.Add("Show song on overlay now (10s)", null, (_, _) => _overlay.ShowNow(TimeSpan.FromSeconds(10)));
             menu.Items.Add("Open OBS overlay in browser", null, (_, _) => OpenOverlayInBrowser());
             menu.Items.Add("Copy OBS overlay URL", null, (_, _) => CopyOverlayUrl());
+            menu.Items.Add("Copy OBS bar overlay URL", null, (_, _) => CopyOverlayUrl("?style=bar"));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(_autoStartItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -85,9 +86,10 @@ namespace AppleMusicDiscordPresence
             catch (Exception ex) { AppLog.Write($"Could not open the overlay URL: {ex.Message}"); }
         }
 
-        private void CopyOverlayUrl()
+        private void CopyOverlayUrl(string query = "")
         {
-            try { Clipboard.SetText(_overlay.Url); AppLog.Write($"Copied overlay URL: {_overlay.Url}"); }
+            var url = _overlay.Url + query;
+            try { Clipboard.SetText(url); AppLog.Write($"Copied overlay URL: {url}"); }
             catch (Exception ex) { AppLog.Write($"Could not copy the overlay URL: {ex.Message}"); }
         }
 
