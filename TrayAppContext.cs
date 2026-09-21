@@ -43,6 +43,7 @@ namespace AppleMusicDiscordPresence
             menu.Items.Add("Show status", null, (_, _) => _statusForm.ShowAndActivate());
             menu.Items.Add("Reconnect to Discord", null, (_, _) => PresenceBridge.ReconnectNow());
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Show song on overlay now (10s)", null, (_, _) => _overlay.ShowNow(TimeSpan.FromSeconds(10)));
             menu.Items.Add("Open OBS overlay in browser", null, (_, _) => OpenOverlayInBrowser());
             menu.Items.Add("Copy OBS overlay URL", null, (_, _) => CopyOverlayUrl());
             menu.Items.Add(new ToolStripSeparator());

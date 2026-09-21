@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AppleMusicDiscordPresence
@@ -18,6 +19,19 @@ namespace AppleMusicDiscordPresence
         public string Url => $"http://127.0.0.1:{Port}/";
 
         private readonly HttpListener _listener = new();
+
+        // Until when (UTC ticks) the overlay should show itself regardless of ?fade=.
+        // Set by /show or the tray menu; reported to the page as "forceShow" in /state.
+        private long _showUntilTicks;
+
+        /// <summary>
+        /// Pops the widget back up for a while even if its ?fade= timer has hidden it -
+        /// e.g. when someone in chat asks what's playing.
+        /// </summary>
+        public void ShowNow(TimeSpan duration)
+            => Interlocked.Exchange(ref _showUntilTicks, (DateTime.UtcNow + duration).Ticks);
+
+        private bool ForceShowActive => DateTime.UtcNow.Ticks < Interlocked.Read(ref _showUntilTicks);
 
         public OverlayServer(int port)
         {
@@ -59,7 +73,7 @@ namespace AppleMusicDiscordPresence
             }
         }
 
-        private static async Task HandleAsync(HttpListenerContext ctx)
+        private async Task HandleAsync(HttpListenerContext ctx)
         {
             try
             {
@@ -81,6 +95,15 @@ namespace AppleMusicDiscordPresence
                         await WriteStateAsync(ctx);
                         break;
 
+                    case "/show":
+                        // GET /show or /show?seconds=15 - handy to wire to a Stream Deck
+                        // button, a Streamer.bot "!song" command, or a browser bookmark.
+                        int seconds = int.TryParse(ctx.Request.QueryString["seconds"], out var s) ? s : 10;
+                        seconds = Math.Clamp(seconds, 1, 300);
+                        ShowNow(TimeSpan.FromSeconds(seconds));
+                        await WriteAsync(ctx, "application/json; charset=utf-8", $"{{\"ok\":true,\"seconds\":{seconds}}}");
+                        break;
+
                     default:
                         ctx.Response.StatusCode = 404;
                         ctx.Response.Close();
@@ -93,7 +116,7 @@ namespace AppleMusicDiscordPresence
             }
         }
 
-        private static async Task WriteStateAsync(HttpListenerContext ctx)
+        private async Task WriteStateAsync(HttpListenerContext ctx)
         {
             var np = await PresenceBridge.GetNowPlayingAsync();
 
@@ -108,6 +131,7 @@ namespace AppleMusicDiscordPresence
                     artUrl = np.ArtUrl,
                     positionMs = (long)np.Position.TotalMilliseconds,
                     durationMs = (long)np.Duration.TotalMilliseconds,
+                    forceShow = ForceShowActive,
                 };
 
             await WriteAsync(ctx, "application/json; charset=utf-8", JsonSerializer.Serialize(payload));

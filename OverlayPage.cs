@@ -185,6 +185,7 @@ namespace AppleMusicDiscordPresence
   const progress = document.getElementById('progress');
   const bar = document.getElementById('bar');
   let lastKey = null;
+  let wasForced = false;
 
   // Restart the CSS slide-in animations from the top (setting animation to 'none',
   // forcing a reflow, then reverting to the stylesheet value is the standard way).
@@ -232,7 +233,13 @@ namespace AppleMusicDiscordPresence
     }
 
     const pastFadeThreshold = fadeMs !== null && data.positionMs >= fadeMs;
-    card.classList.toggle('visible', !pastFadeThreshold);
+    // /show (or the tray's "Show song on overlay now") sets forceShow for a few
+    // seconds so the widget can be recalled after ?fade= has hidden it. Replay the
+    // slide-in on the way back up so it doesn't just silently fade in.
+    const forced = !!data.forceShow;
+    if (forced && !wasForced && pastFadeThreshold) playSwapAnimation();
+    wasForced = forced;
+    card.classList.toggle('visible', !pastFadeThreshold || forced);
   }
 
   async function poll() {

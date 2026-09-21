@@ -98,6 +98,13 @@ nothing the page does can prevent it. Instead:
 
 Combine them: `http://127.0.0.1:39285/?scale=1.4&fade=25`
 
+**Recalling the widget after it has faded** (e.g. someone asks what's playing):
+right-click the tray icon → **Show song on overlay now (10s)**, or hit
+`http://127.0.0.1:39285/show` (optionally `?seconds=15`, 1–300). That endpoint is
+a plain GET, so it can be wired to a Stream Deck button, a Streamer.bot `!song`
+command ("Fetch URL" action), or a browser bookmark. The widget slides back in
+within about a second and fades out again on its own once the time is up.
+
 The widget is centered in the page. To anchor it elsewhere, edit the
 `body { align-items / justify-content }` rule in `OverlayPage.cs`.
 
