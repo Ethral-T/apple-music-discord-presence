@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Apple Music Presence">
+  <title>Apple Music Presence</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8468FF"/>
+      <stop offset="1" stop-color="#4F34D6"/>
+    </linearGradient>
+    <linearGradient id="art" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF5D73"/>
+      <stop offset="1" stop-color="#FFB547"/>
+    </linearGradient>
+    <clipPath id="strip"><rect x="34" y="156" width="188" height="36" rx="10"/></clipPath>
+  </defs>
+  <!-- violet tile -->
+  <rect x="8" y="8" width="240" height="240" rx="50" fill="url(#tile)"/>
+
+  <!-- the overlay card: art, title, artist, progress -->
+  <rect x="34" y="60" width="188" height="80" rx="16" fill="#121216" fill-opacity=".93"/>
+  <rect x="46" y="72" width="56" height="56" rx="10" fill="url(#art)"/>
+  <circle cx="74" cy="100" r="17" fill="none" stroke="#FFFFFF" stroke-opacity=".59" stroke-width="3"/>
+  <circle cx="74" cy="100" r="5" fill="#FFFFFF" fill-opacity=".82"/>
+  <rect x="114" y="76" width="84" height="12" rx="6" fill="#FFFFFF"/>
+  <rect x="114" y="96" width="60" height="9" rx="4.5" fill="#FFFFFF" fill-opacity=".59"/>
+  <rect x="114" y="116" width="96" height="7" rx="3.5" fill="#FFFFFF" fill-opacity=".25"/>
+  <rect x="114" y="116" width="56" height="7" rx="3.5" fill="#FFFFFF"/>
+
+  <!-- the full-width bar: it fills as the song plays -->
+  <rect x="34" y="156" width="188" height="36" rx="10" fill="#121216" fill-opacity=".93"/>
+  <rect x="34" y="156" width="108" height="36" fill="#FFFFFF" fill-opacity=".27" clip-path="url(#strip)"/>
+  <rect x="82" y="170" width="92" height="8" rx="4" fill="#FFFFFF" fill-opacity=".92"/>
+</svg>
