@@ -1,9 +1,13 @@
-# Normalize line endings: store LF in the repo, check out native on each platform.
+# Keep line endings predictable: LF in the repo, native on each platform at checkout.
 * text=auto
 
+# Source and docs
 *.cs      text diff=csharp
 *.csproj  text
 *.md      text
 *.json    text
-*.ico     binary
+*.svg     text
+
+# Binary files
 *.png     binary
+*.ico     binary
